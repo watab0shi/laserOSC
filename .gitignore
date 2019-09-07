@@ -19,6 +19,11 @@ obj/*
 *.VC.db
 *.VC.opendb
 *.exe
+*.dll
+*.exp
+*.iobj
+*.ipdb
+*.lib
 
 # common
 /bin/data/gui/settings.xml

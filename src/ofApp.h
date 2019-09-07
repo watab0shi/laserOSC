@@ -6,18 +6,25 @@
 #include "ofxOsc.h"
 
 
-//--------------------------------------------------------------
+// ofApp
+//----------------------------------------
 class ofApp : public ofBaseApp
 {
 public:
   void setup();
   void update();
   void draw();
-  void keyPressed( int key );
+  void mouseScrolled( int _x, int _y, float _scrollX, float _scrollY );
+  void keyPressed( int _key );
+  void windowResized( int _w, int _h );
   void exit();
   
+  int w, h;
+
   // ust
   ofxUST               ust;
+  ofParameter< int >   direction;
+  void                 directionChanged( int& _direction );
   ofParameter< bool >  bMirror;
   void                 mirrorChanged( bool& _b );
   ofParameter< int >   step;
@@ -26,17 +33,19 @@ public:
   ofParameter< int >   mmW, mmH;
   ofParameter< int >   pxW, pxH;
   
-  ofRectangle          screenArea;
-  vector< ofVec2f >    mmTouchPoints;
-  vector< ofVec2f >    touchPoints;
+  ofRectangle            screenArea;
+  std::vector< ofVec2f > mmTouchPoints;
+  std::vector< ofVec2f > touchPoints;
+  float                  drawingScale;
   
   // osc
-  string               oscHost;
-  int                  oscPort;
-  ofxOscSender         oscSender;
-  void                 sendPointsAsString();
-  void                 sendPoints();
-  ofParameter< bool >  bSendAsString;
+  string                     oscHost;
+  int                        oscPort;
+  ofxOscSender               oscSender;
+  void                       sendPointsAsString();
+  void                       sendPoints();
+  ofParameter< bool >        bSendAsString;
+  std::deque< std::string >  messageHistory;
   
   // gui
   ofxPanel             gui;
@@ -44,4 +53,5 @@ public:
   ofParameter< float > fps;
   ofFile               settingFile;
   void                 setupGui();
+  bool                 bDrawGui;
 };

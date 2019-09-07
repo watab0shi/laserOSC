@@ -1,32 +1,56 @@
 #include "ofApp.h"
 
-//--------------------------------------------------------------
+namespace
+{
+  const std::string OSC_ADDRESS = "/laserPoints";
+  const std::string OSC_HOST    = "127.0.0.1";
+  const int         OSC_PORT    = 8000;
+
+  const int         MAX_NUM_MESSAGE_HISTORY = 30;
+}
+
+// setup
+//----------------------------------------
 void ofApp::setup()
 {
+  w = ofGetWidth();
+  h = ofGetHeight();
+  drawingScale = 0.15;
+
   setupGui();
   
-  ust.setDirection( ofxUST::DIRECTION_DOWN );
-  ust.setMirror( bMirror );
-  ust.setScanningParameterByAngles( -135, 135, 1 );
+  ust.open();
   
-  if( ust.isConnected() ) ust.startMeasurement();
-  else                    ofLog() << "Connection failed!";
+  if( ust.isConnected() )
+  {
+    ust.setScanningParameterByAngles( -90, 90, 1 );
+    ust.startMeasurement();
+  }
   
   oscHost = "localhost";// 127.0.0.1
   oscPort = 9000;
   oscSender.setup( oscHost, oscPort );
+
+  //ofSetFrameRate( 40 );
   
   ofBackground( 0 );
 }
 
-//--------------------------------------------------------------
+// update
+//----------------------------------------
 void ofApp::update()
 {
   fps = floor( ofGetFrameRate() * 10 ) / 10;
   
   ust.update();
   
-  screenArea.setFromCenter( 0, ( mmH * .5 ) + distToScreen, mmW, mmH );
+  ofVec2f pos;
+  ofxUST::Direction d = ust.getDirection();
+  if( d == ofxUST::DIRECTION_DOWN  ) pos.y = ( ( float )mmH / 2 ) + distToScreen;
+  if( d == ofxUST::DIRECTION_LEFT  ) pos.x = -( ( float )mmW / 2 ) - distToScreen;
+  if( d == ofxUST::DIRECTION_UP    ) pos.y = -( ( float )mmH / 2 ) - distToScreen;
+  if( d == ofxUST::DIRECTION_RIGHT ) pos.x = ( ( float )mmW / 2 ) + distToScreen;
+  screenArea.setFromCenter( pos, mmW, mmH );
   
   mmTouchPoints.clear();
   touchPoints.clear();
@@ -54,13 +78,14 @@ void ofApp::update()
   }
 }
 
-//--------------------------------------------------------------
+// sendPointsAsString
+//----------------------------------------
 void ofApp::sendPointsAsString()
 {
   ofxOscMessage message;
-  message.setAddress( "/laserPoints" );
+  message.setAddress( OSC_ADDRESS );
   
-  string pointsString = "";
+  std::string pointsString = "";
   for( int i = 0; i < touchPoints.size(); ++i )
   {
     if( i > 0 ) pointsString += "/";
@@ -69,29 +94,50 @@ void ofApp::sendPointsAsString()
   
   message.addStringArg( pointsString );
   oscSender.sendMessage( message );
+
+  messageHistory.push_back( OSC_ADDRESS + " " + pointsString );
+  if( messageHistory.size() > MAX_NUM_MESSAGE_HISTORY )
+  {
+    messageHistory.pop_front();
+  }
 }
 
-//--------------------------------------------------------------
+// sendPoints
+//----------------------------------------
 void ofApp::sendPoints()
 {
   for( int i = 0; i < touchPoints.size(); ++i )
   {
+    float x = touchPoints.at( i ).x;
+    float y = touchPoints.at( i ).y;
+
     ofxOscMessage message;
-    message.setAddress( "/laserPoints" );
-    message.addFloatArg( touchPoints.at( i ).x );
-    message.addFloatArg( touchPoints.at( i ).y );
+    message.setAddress( OSC_ADDRESS );
+    message.addFloatArg( x );
+    message.addFloatArg( y );
     oscSender.sendMessage( message );
+
+    messageHistory.push_back( OSC_ADDRESS + " " + ofToString( x ) + " " + ofToString( y ) );
+    if( messageHistory.size() > MAX_NUM_MESSAGE_HISTORY )
+    {
+      messageHistory.pop_front();
+    }
   }
 }
 
-//--------------------------------------------------------------
+// draw
+//----------------------------------------
 void ofApp::draw()
 {
-  static float s = 0.15;
   ofPushMatrix();
   {
-    ofTranslate( ofGetWidth() / 2, 0 );
-    ofScale( s, s );
+	ofxUST::Direction d = ust.getDirection();
+	if( d == ofxUST::DIRECTION_DOWN  ) ofTranslate( w / 2, 0 );
+	if( d == ofxUST::DIRECTION_LEFT  ) ofTranslate( w, h / 2 );
+	if( d == ofxUST::DIRECTION_UP    ) ofTranslate( w / 2, h );
+	if( d == ofxUST::DIRECTION_RIGHT ) ofTranslate( 0, h / 2 );
+
+    ofScale( drawingScale, drawingScale );
     
     ofSetColor( 120 );
     glBegin( GL_LINES );
@@ -115,38 +161,73 @@ void ofApp::draw()
   }
   ofPopMatrix();
   
-  gui.draw();
+  if( bDrawGui )
+  {
+    int i = 0;
+    int y = h - 20;
+    for( auto& m : messageHistory )
+    {
+      ofDrawBitmapString( ofToString( i, 2, '0' ) + " : " + m, 20, y );
+      y -= 20;
+      ++i;
+    }
+
+    gui.draw();
+  }
 }
 
-//--------------------------------------------------------------
-void ofApp::keyPressed( int key )
+// mouseScrolled
+//----------------------------------------
+void ofApp::mouseScrolled( int _x, int _y, float _scrollX, float _scrollY )
 {
-  if( key == 'm' )
+  drawingScale = ofClamp( drawingScale - _scrollY * 0.01, 0.01, 1.0 );
+}
+
+// keyPressed
+//----------------------------------------
+void ofApp::keyPressed( int _key )
+{
+  if( _key == ' ' ) bDrawGui = !bDrawGui;
+
+  if( _key == 'm' )
   {
     bMirror = !bMirror;
-    ust.setMirror( bMirror );
   }
   
-  if( key == OF_KEY_RIGHT ) ust.setDirection( ofxUST::DIRECTION_RIGHT );
-  if( key == OF_KEY_DOWN )  ust.setDirection( ofxUST::DIRECTION_DOWN );
-  if( key == OF_KEY_LEFT )  ust.setDirection( ofxUST::DIRECTION_LEFT );
-  if( key == OF_KEY_UP )    ust.setDirection( ofxUST::DIRECTION_UP );
+  if( _key == OF_KEY_RIGHT ) direction = ( int )ofxUST::DIRECTION_RIGHT;
+  if( _key == OF_KEY_DOWN )  direction = ( int )ofxUST::DIRECTION_DOWN;
+  if( _key == OF_KEY_LEFT )  direction = ( int )ofxUST::DIRECTION_LEFT;
+  if( _key == OF_KEY_UP )    direction = ( int )ofxUST::DIRECTION_UP;
+
+  if( _key == 'f' ) ofToggleFullscreen();
 }
 
-//--------------------------------------------------------------
+// windowResized
+//----------------------------------------
+void ofApp::windowResized( int _w, int _h )
+{
+  w = _w;
+  h = _h;
+}
+
+// exit
+//----------------------------------------
 void ofApp::exit()
 {
   gui.saveToFile( settingFile.getAbsolutePath() );
 }
 
-//--------------------------------------------------------------
+// setupGui
+//----------------------------------------
 void ofApp::setupGui()
 {
+  direction.addListener( this, &ofApp::directionChanged );
   bMirror.addListener( this, &ofApp::mirrorChanged );
   step.addListener( this, &ofApp::stepChanged );
   
   params.setName( "LaserOSC" );
   params.add( fps.set( "FPS", 0, 0, 60 ) );
+  params.add( direction.set( "Direction", ( int )ofxUST::DIRECTION_DOWN, 0, ( int )ofxUST::DIRECTION_SIZE - 1 ) );
   params.add( bMirror.set( "Mirror", true ) );
   params.add( step.set( "Step", 1, 1, 10 ) );
   params.add( distToScreen.set( "DistToScreen", 0, 0, 2000 ) );
@@ -161,15 +242,26 @@ void ofApp::setupGui()
   
   settingFile = ofFile( savePath );
   if( settingFile.exists() ) gui.loadFromFile( savePath );
+
+  bDrawGui = true;
 }
 
-//--------------------------------------------------------------
+// directionChanged
+//----------------------------------------
+void ofApp::directionChanged( int& _direction )
+{
+  ust.setDirection( ( ofxUST::Direction )_direction );
+}
+
+// mirrorChanged
+//----------------------------------------
 void ofApp::mirrorChanged( bool& _b )
 {
   ust.setMirror( bMirror );
 }
 
-//--------------------------------------------------------------
+// stepChanged
+//----------------------------------------
 void ofApp::stepChanged( int& _v )
 {
   ust.stopMeasurement();
