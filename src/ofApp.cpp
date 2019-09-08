@@ -290,7 +290,15 @@ void ofApp::setupGui()
   direction.addListener( this, &ofApp::directionChanged );
   bMirror.addListener( this, &ofApp::mirrorChanged );
   step.addListener( this, &ofApp::stepChanged );
-
+  
+  int hue = 0;// gui color
+  
+  ofxGuiSetFont( "gui/Menlo-Italic.ttf", 10 );
+  ofxGuiSetDefaultWidth( 255 );
+  ofxGuiSetHeaderColor( ofColor::fromHsb( hue, 255, 180 ) );
+  ofxGuiSetFillColor( ofColor::fromHsb( hue, 255, 180 ) );
+  ofxGuiSetBackgroundColor( ofColor( 36 ) );
+  
   sensorParams.setName( "Sensor" );
   sensorParams.add( direction.set( "Direction", ( int )ofxUST::DIRECTION_DOWN, 0, ( int )ofxUST::DIRECTION_SIZE - 1 ) );
   sensorParams.add( bMirror.set( "Mirror", true ) );
@@ -300,7 +308,7 @@ void ofApp::setupGui()
   sensorParams.add( mmH.set( "ScreenH", 3000, 1000, 5000 ) );
   sensorParams.add( pxW.set( "PixelW", 1280, 1024, 1920 ) );
   sensorParams.add( pxH.set( "PixelH", 800, 768, 1200 ) );
-
+  
   oscParams.setName( "OSC" );
   oscParams.add( oscHost.set( "OscHost", "127.0.0.1" ) );
   oscParams.add( oscPort.set( "OscPort", 8000, 0, 10000 ) );
@@ -314,10 +322,14 @@ void ofApp::setupGui()
   
   string savePath = "gui/settings.xml";
   gui.setup( params, savePath );
+  gui.setUseTTF( true );
+  gui.setSize( 255, gui.getShape().height + 10 );
+  gui.setHeaderBackgroundColor( ofColor::fromHsb( hue, 255, 180 ) );
   
-  settingFile = ofFile( savePath );
-  if( settingFile.exists() ) gui.loadFromFile( savePath );
-
+  // load gui settings
+  settingFile = ofFile( ofToDataPath( "gui/settings.xml" ) );
+  if( settingFile.exists() ) gui.loadFromFile( settingFile.getAbsolutePath() );
+  
   bDrawGui = true;
 }
 
