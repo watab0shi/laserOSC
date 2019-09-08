@@ -6,6 +6,15 @@
 #include "ofxOsc.h"
 
 
+enum OscSendingType
+{
+  SENDTYPE_POINT,
+  SENDTYPE_POUINTS_STRING,
+  SENDTYPE_CLUSTERED_POINT,
+  SENDTYPE_CLUSTERED_POINTS_STRING,
+  SENDTYPE_SIZE
+};
+
 // ofApp
 //----------------------------------------
 class ofApp : public ofBaseApp
@@ -23,6 +32,7 @@ public:
 
   // ust
   ofxUST               ust;
+  ofParameterGroup     sensorParams;
   ofParameter< int >   direction;
   void                 directionChanged( int& _direction );
   ofParameter< bool >  bMirror;
@@ -36,15 +46,20 @@ public:
   ofRectangle            screenArea;
   std::vector< ofVec2f > mmTouchPoints;
   std::vector< ofVec2f > touchPoints;
+  std::vector< ofVec2f > mmClusterPoints;
+  std::vector< ofVec2f > clusterPoints;
+  std::vector< float >   clusterRadius;
   float                  drawingScale;
   
   // osc
-  string                     oscHost;
-  int                        oscPort;
   ofxOscSender               oscSender;
-  void                       sendPointsAsString();
-  void                       sendPoints();
-  ofParameter< bool >        bSendAsString;
+  void                       sendPointsAsString( std::vector< ofVec2f >* _points );
+  void                       sendPoints( std::vector< ofVec2f >* _points );
+  ofParameterGroup           oscParams;
+  ofParameter< std::string > oscHost;
+  ofParameter< int >         oscPort;
+  ofParameter< std::string > oscAddress;
+  ofParameter< int >         sendingType;
   std::deque< std::string >  messageHistory;
   
   // gui

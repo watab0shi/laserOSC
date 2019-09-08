@@ -2,11 +2,14 @@
 
 namespace
 {
-  const std::string OSC_ADDRESS = "/laserPoints";
-  const std::string OSC_HOST    = "127.0.0.1";
-  const int         OSC_PORT    = 8000;
+  const int MAX_NUM_MESSAGE_HISTORY = 30;
 
-  const int         MAX_NUM_MESSAGE_HISTORY = 30;
+  const std::vector< std::string > sendingTypeNames = {
+    "SENDTYPE_POINT",
+    "SENDTYPE_POUINTS_STRING",
+    "SENDTYPE_CLUSTERED_POINT",
+    "SENDTYPE_CLUSTERED_POINTS_STRING"
+  };
 }
 
 // setup
@@ -26,9 +29,7 @@ void ofApp::setup()
     ust.setScanningParameterByAngles( -90, 90, 1 );
     ust.startMeasurement();
   }
-  
-  oscHost = "localhost";// 127.0.0.1
-  oscPort = 9000;
+
   oscSender.setup( oscHost, oscPort );
 
   //ofSetFrameRate( 40 );
@@ -55,12 +56,17 @@ void ofApp::update()
   mmTouchPoints.clear();
   touchPoints.clear();
   
+  std::vector< ofVec2f > tmpPoints;
+  mmClusterPoints.clear();
+  clusterPoints.clear();
+  clusterRadius.clear();
   for( int i = 0; i < ust.coordinates.size(); ++i )
   {
     int mmX = ust.coordinates.at( i ).x;
     int mmY = ust.coordinates.at( i ).y;
     
-    if( screenArea.inside( mmX, mmY ) )
+    bool bHit = screenArea.inside( mmX, mmY );
+    if( bHit )
     {
       mmTouchPoints.push_back( ofVec2f( mmX, mmY ) );
       
@@ -68,34 +74,83 @@ void ofApp::update()
       float y = ofMap( mmY, screenArea.getTop(), screenArea.getBottom(), 0., pxH, true );
       
       touchPoints.push_back( ofVec2f( x, y ) );
+
+      tmpPoints.push_back( ofVec2f( mmX, mmY ) );
+    }
+    else
+    {
+      // 2ŒÂˆÈã˜A‘±‚µ‚Ä‚½‚ç
+      if( tmpPoints.size() >= 10 )
+      {
+        ofPolyline pl;
+        for( auto& p : tmpPoints )
+        {
+          pl.addVertex( p );
+        }
+        pl.addVertex( tmpPoints.front() );
+        pl = pl.getResampledByCount( 10 );
+
+        ofRectangle rect = pl.getBoundingBox();
+        float radius = ofVec2f( rect.width, rect.height ).length() / 2;
+        clusterRadius.push_back( radius );
+
+        ofVec2f p = rect.getCenter();
+        mmClusterPoints.push_back( p );
+
+        float x = ofMap( p.x, screenArea.getLeft(), screenArea.getRight(), 0., pxW, true );
+        float y = ofMap( p.y, screenArea.getTop(), screenArea.getBottom(), 0., pxH, true );
+
+        clusterPoints.push_back( ofVec2f( x, y ) );
+
+        tmpPoints.clear();
+      }
+
+      tmpPoints.clear();
     }
   }
   
-  if( touchPoints.size() > 0 )
+  switch( ( OscSendingType )sendingType.get() )
   {
-    if( bSendAsString ) sendPointsAsString();
-    else                sendPoints();
+  case SENDTYPE_POINT:
+    sendPoints( &touchPoints );
+    break;
+
+  case SENDTYPE_POUINTS_STRING:
+    sendPointsAsString( &touchPoints );
+    break;
+
+  case SENDTYPE_CLUSTERED_POINT:
+    sendPoints( &clusterPoints );
+    break;
+
+  case SENDTYPE_CLUSTERED_POINTS_STRING:
+    sendPointsAsString( &clusterPoints );
+    break;
   }
 }
 
 // sendPointsAsString
 //----------------------------------------
-void ofApp::sendPointsAsString()
+void ofApp::sendPointsAsString( std::vector< ofVec2f >* _points )
 {
+  if( _points->empty() ) return;
+
   ofxOscMessage message;
-  message.setAddress( OSC_ADDRESS );
+  message.setAddress( oscAddress );
   
   std::string pointsString = "";
-  for( int i = 0; i < touchPoints.size(); ++i )
+  int i = 0;
+  for( auto& p : *_points )
   {
     if( i > 0 ) pointsString += "/";
-    pointsString += ofToString( touchPoints.at( i ).x ) + "," + ofToString( touchPoints.at( i ).y );
+    pointsString += ofToString( p.x ) + "," + ofToString( p.y );
+    ++i;
   }
   
   message.addStringArg( pointsString );
   oscSender.sendMessage( message );
 
-  messageHistory.push_back( OSC_ADDRESS + " " + pointsString );
+  messageHistory.push_back( oscAddress.get() + " " + pointsString );
   if( messageHistory.size() > MAX_NUM_MESSAGE_HISTORY )
   {
     messageHistory.pop_front();
@@ -104,20 +159,19 @@ void ofApp::sendPointsAsString()
 
 // sendPoints
 //----------------------------------------
-void ofApp::sendPoints()
+void ofApp::sendPoints( std::vector< ofVec2f >* _points )
 {
-  for( int i = 0; i < touchPoints.size(); ++i )
-  {
-    float x = touchPoints.at( i ).x;
-    float y = touchPoints.at( i ).y;
+  if( _points->empty() ) return;
 
+  for( auto& p : *_points )
+  {
     ofxOscMessage message;
-    message.setAddress( OSC_ADDRESS );
-    message.addFloatArg( x );
-    message.addFloatArg( y );
+    message.setAddress( oscAddress );
+    message.addFloatArg( p.x );
+    message.addFloatArg( p.y );
     oscSender.sendMessage( message );
 
-    messageHistory.push_back( OSC_ADDRESS + " " + ofToString( x ) + " " + ofToString( y ) );
+    messageHistory.push_back( oscAddress.get() + " " + ofToString( p.x ) + " " + ofToString( p.y ) );
     if( messageHistory.size() > MAX_NUM_MESSAGE_HISTORY )
     {
       messageHistory.pop_front();
@@ -131,28 +185,38 @@ void ofApp::draw()
 {
   ofPushMatrix();
   {
-	ofxUST::Direction d = ust.getDirection();
-	if( d == ofxUST::DIRECTION_DOWN  ) ofTranslate( w / 2, 0 );
-	if( d == ofxUST::DIRECTION_LEFT  ) ofTranslate( w, h / 2 );
-	if( d == ofxUST::DIRECTION_UP    ) ofTranslate( w / 2, h );
-	if( d == ofxUST::DIRECTION_RIGHT ) ofTranslate( 0, h / 2 );
+    ofxUST::Direction d = ust.getDirection();
+    if( d == ofxUST::DIRECTION_DOWN  ) ofTranslate( w / 2, 0 );
+    if( d == ofxUST::DIRECTION_LEFT  ) ofTranslate( w, h / 2 );
+    if( d == ofxUST::DIRECTION_UP    ) ofTranslate( w / 2, h );
+    if( d == ofxUST::DIRECTION_RIGHT ) ofTranslate( 0, h / 2 );
 
     ofScale( drawingScale, drawingScale );
     
     ofSetColor( 120 );
     glBegin( GL_LINES );
-    for( int i = 0; i < ust.coordinates.size(); ++i )
+    for( auto& p : ust.coordinates )
     {
       glVertex2f( 0, 0 );
-      glVertex2f( ust.coordinates.at( i ).x, ust.coordinates.at( i ).y );
+      glVertex2f( p.x, p.y );
     }
     glEnd();
     
     ofFill();
-    ofSetColor( 0, 255, 0 );
-    for( int i = 0; i < mmTouchPoints.size(); ++i )
+    ofSetColor( 0, 255, 255 );
+    for( auto& p : mmTouchPoints )
     {
-      ofDrawCircle( mmTouchPoints.at( i ).x, mmTouchPoints.at( i ).y, 20 );
+      ofDrawCircle( p, 5 );
+    }
+
+    ofFill();
+    ofSetColor( 0, 255, 0 );
+    int i = 0;
+    for( auto& p : mmClusterPoints )
+    {
+      //float r = clusterRadius.at( i );
+      ofDrawCircle( p, 10 );
+      ++i;
     }
     
     ofNoFill();
@@ -164,13 +228,15 @@ void ofApp::draw()
   if( bDrawGui )
   {
     int i = 0;
-    int y = h - 20;
+    int y = h - 40;
     for( auto& m : messageHistory )
     {
       ofDrawBitmapString( ofToString( i, 2, '0' ) + " : " + m, 20, y );
       y -= 20;
       ++i;
     }
+
+    ofDrawBitmapString( sendingTypeNames.at( sendingType ), 20, h - 20 );
 
     gui.draw();
   }
@@ -224,18 +290,27 @@ void ofApp::setupGui()
   direction.addListener( this, &ofApp::directionChanged );
   bMirror.addListener( this, &ofApp::mirrorChanged );
   step.addListener( this, &ofApp::stepChanged );
+
+  sensorParams.setName( "Sensor" );
+  sensorParams.add( direction.set( "Direction", ( int )ofxUST::DIRECTION_DOWN, 0, ( int )ofxUST::DIRECTION_SIZE - 1 ) );
+  sensorParams.add( bMirror.set( "Mirror", true ) );
+  sensorParams.add( step.set( "Step", 1, 1, 10 ) );
+  sensorParams.add( distToScreen.set( "DistToScreen", 0, 0, 2000 ) );
+  sensorParams.add( mmW.set( "ScreenW", 4000, 1000, 5000 ) );
+  sensorParams.add( mmH.set( "ScreenH", 3000, 1000, 5000 ) );
+  sensorParams.add( pxW.set( "PixelW", 1280, 1024, 1920 ) );
+  sensorParams.add( pxH.set( "PixelH", 800, 768, 1200 ) );
+
+  oscParams.setName( "OSC" );
+  oscParams.add( oscHost.set( "OscHost", "127.0.0.1" ) );
+  oscParams.add( oscPort.set( "OscPort", 8000, 0, 10000 ) );
+  oscParams.add( oscAddress.set( "OscAddress", "/laserPoints" ) );
+  oscParams.add( sendingType.set( "SendingType", ( int )SENDTYPE_CLUSTERED_POINT, 0, ( int )SENDTYPE_SIZE - 1 ) );
   
   params.setName( "LaserOSC" );
   params.add( fps.set( "FPS", 0, 0, 60 ) );
-  params.add( direction.set( "Direction", ( int )ofxUST::DIRECTION_DOWN, 0, ( int )ofxUST::DIRECTION_SIZE - 1 ) );
-  params.add( bMirror.set( "Mirror", true ) );
-  params.add( step.set( "Step", 1, 1, 10 ) );
-  params.add( distToScreen.set( "DistToScreen", 0, 0, 2000 ) );
-  params.add( mmW.set( "ScreenW", 4000, 1000, 5000 ) );
-  params.add( mmH.set( "ScreenH", 3000, 1000, 5000 ) );
-  params.add( pxW.set( "PixelW", 1280, 1024, 1920 ) );
-  params.add( pxH.set( "PixelH", 800, 768, 1200 ) );
-  params.add( bSendAsString.set( "SendAsString", false ) );
+  params.add( sensorParams );
+  params.add( oscParams );
   
   string savePath = "gui/settings.xml";
   gui.setup( params, savePath );
