@@ -24,6 +24,8 @@ obj/*
 *.iobj
 *.ipdb
 *.lib
+*.ilk
+*.pdb
 
 # common
 /bin/data/gui/settings.xml
