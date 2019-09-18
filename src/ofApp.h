@@ -42,6 +42,7 @@ public:
   ofParameter< int >   distToScreen;
   ofParameter< int >   mmW, mmH;
   ofParameter< int >   pxW, pxH;
+  ofParameter< int >   clusterThresholdNum;
   
   ofRectangle            screenArea;
   std::vector< ofVec2f > mmTouchPoints;

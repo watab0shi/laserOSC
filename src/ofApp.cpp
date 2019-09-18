@@ -80,7 +80,7 @@ void ofApp::update()
     else
     {
       // 2ŒÂˆÈã˜A‘±‚µ‚Ä‚½‚ç
-      if( tmpPoints.size() >= 10 )
+      if( tmpPoints.size() >= clusterThresholdNum )
       {
         ofPolyline pl;
         for( auto& p : tmpPoints )
@@ -246,7 +246,7 @@ void ofApp::draw()
 //----------------------------------------
 void ofApp::mouseScrolled( int _x, int _y, float _scrollX, float _scrollY )
 {
-  drawingScale = ofClamp( drawingScale - _scrollY * 0.01, 0.01, 1.0 );
+  drawingScale = ofClamp( drawingScale - _scrollY * 0.0025, 0.0025, 1.0 );
 }
 
 // keyPressed
@@ -308,6 +308,7 @@ void ofApp::setupGui()
   sensorParams.add( mmH.set( "ScreenH", 3000, 1000, 5000 ) );
   sensorParams.add( pxW.set( "PixelW", 1280, 1024, 1920 ) );
   sensorParams.add( pxH.set( "PixelH", 800, 768, 1200 ) );
+  sensorParams.add( clusterThresholdNum.set( "ClusterThresholdNum", 5, 1, 100 ) );
   
   oscParams.setName( "OSC" );
   oscParams.add( oscHost.set( "OscHost", "127.0.0.1" ) );
